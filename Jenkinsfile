@@ -1,3 +1,9 @@
+    // Define color map for Slack notifications
+def COLOR_MAP = [
+        'SUCCESS': 'good', 
+        'FAILURE': 'danger'
+    ]
+    
 pipeline {
     agent any
     tools {
@@ -20,11 +26,7 @@ pipeline {
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
     }
 
-    // Define color map for Slack notifications
-    def COLOR_MAP = [
-        'SUCCESS': 'good', 
-        'FAILURE': 'danger'
-    ]
+
 
     stages {
         stage('Build') {
