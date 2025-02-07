@@ -20,6 +20,12 @@ pipeline {
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
     }
 
+    // Define color map for Slack notifications
+    def COLOR_MAP = [
+        'SUCCESS': 'good', 
+        'FAILURE': 'danger'
+    ]
+
     stages {
         stage('Build') {
             steps {
@@ -99,6 +105,16 @@ pipeline {
                     ]
                 )
             }
+        }
+    }
+
+    // Post-build actions
+    post {
+        always {
+            echo 'Sending Slack Notifications.'
+            slackSend channel: '#jenkinscicd',
+                color: COLOR_MAP[currentBuild.currentResult],
+                message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at: ${env.BUILD_URL}"
         }
     }
 }
