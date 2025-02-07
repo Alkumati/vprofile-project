@@ -1,26 +1,27 @@
 pipeline {
     agent any
     tools {
-        maven "MAVEN3.9"
+         maven "MAVEN3.9"
         jdk "JDK17"
+
     }
     
     environment {
         SNAP_REPO = 'vprofile-snapshot'
-        NEXUS_USER = 'admin'
-        NEXUS_PASS = 'admin'
-        RELEASE_REPO = 'vprofile-release'
-        CENTRAL_REPO = 'vpro-maven-central'
-        NEXUSIP = '172.31.28.98'
-        NEXUSPORT = '8081'
-        NEXUS_GRP_REPO = 'vpro-maven-group'
+		NEXUS_USER = 'admin'
+		NEXUS_PASS = 'admin'
+		RELEASE_REPO = 'vprofile-release'
+		CENTRAL_REPO = 'vpro-maven-central'
+		NEXUSIP = '172.31.28.98'
+		NEXUSPORT = '8081'
+		NEXUS_GRP_REPO = 'vpro-maven-group'
         NEXUS_LOGIN = 'nexuslogin'
         SONARSERVER = 'sonarserver'
-        SONARSCANNER = tool name: 'sonarscanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+        SONARSCANNER = 'sonarscanner'
     }
 
     stages {
-        stage('Build') {
+        stage('Build'){
             steps {
                 sh 'mvn -s settings.xml -DskipTests install'
             }
@@ -32,22 +33,26 @@ pipeline {
             }
         }
 
-        stage('Test') {
+        stage('Test'){
             steps {
                 sh 'mvn -s settings.xml test'
             }
+
         }
 
-        stage('Checkstyle Analysis') {
+        stage('Checkstyle Analysis'){
             steps {
                 sh 'mvn -s settings.xml checkstyle:checkstyle'
             }
         }
 
         stage('Sonar Analysis') {
+            environment {
+                scannerHome = tool "${SONARSCANNER}"
+            }
             steps {
                withSonarQubeEnv("${SONARSERVER}") {
-                   sh '''${SONARSCANNER}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
+                   sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
                    -Dsonar.projectName=vprofile \
                    -Dsonar.projectVersion=1.0 \
                    -Dsonar.sources=src/ \
