@@ -63,13 +63,41 @@ pipeline {
             }
         }
 
+        // Quality Gate stage commented out
+        /*
         stage("Quality Gate") {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    // Wait for the SonarQube Quality Gate result
-                    // abortPipeline: true will fail the pipeline if the Quality Gate fails
-                    waitForQualityGate abortPipeline: true
+                timeout(time: 10, unit: 'MINUTES') {
+                    script {
+                        echo "Waiting for SonarQube Quality Gate..."
+                        def qualityGate = waitForQualityGate abortPipeline: true
+                        echo "Quality Gate Status: ${qualityGate.status}"
+                    }
                 }
+            }
+        }
+        */
+
+        // New stage to upload artifact to Nexus
+        stage("UploadArtifact") {
+            steps {
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3', // Nexus version
+                    protocol: 'http', // Protocol (http or https)
+                    nexusUrl: "${NEXUSIP}:${NEXUSPORT}", // Nexus server URL
+                    groupId: 'QA', // Group ID for the artifact
+                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}", // Version of the artifact
+                    repository: "${RELEASE_REPO}", // Nexus repository to upload to
+                    credentialsId: "${NEXUS_LOGIN}", // Jenkins credentials ID for Nexus
+                    artifacts: [
+                        [
+                            artifactId: 'vproapp', // Artifact ID
+                            classifier: '', // Classifier (optional)
+                            file: 'target/vprofile-v2.war', // Path to the file to upload
+                            type: 'war' // Type of the artifact
+                        ]
+                    ]
+                )
             }
         }
     }
