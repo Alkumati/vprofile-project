@@ -24,7 +24,7 @@ pipeline {
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
-        registryCredential ='ecr:us-eas-1:awscreds'
+        registryCredential ='ecr:us-east-1:awscreds'
         appRegistry= '354331349052.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
         vprofileRegistry = "https://354331349052.dkr.ecr.us-east-1.amazonaws.com"
     }
