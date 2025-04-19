@@ -3,7 +3,7 @@ def COLOR_MAP = [
     'SUCCESS': 'good', 
     'FAILURE': 'danger'
 ]
-
+    
 pipeline {
     agent any
     tools {
@@ -12,9 +12,9 @@ pipeline {
     }
 
     environment {
-        // Basic configuration
         SNAP_REPO = 'vprofile-snapshot'
         NEXUS_USER = 'admin'
+        NEXUS_PASS = 'admin'
         RELEASE_REPO = 'vprofile-release'
         CENTRAL_REPO = 'vpro-maven-central'
         NEXUSIP = '172.31.28.98'
@@ -24,12 +24,7 @@ pipeline {
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
-        
-        // Credentials
         NEXUSPASS = credentials("nexuspass")
-        
-        // Timestamp handling
-        BUILD_TIMESTAMP = sh(script: 'date +%Y-%m-%d_%H-%M-%S', returnStdout: true).trim()
     }
 
     stages {
@@ -98,32 +93,26 @@ pipeline {
         }
 
         stage('Ansible Deploy to staging') {
-            environment {
-                ANSIBLE_PYTHON_INTERPRETER = '/usr/bin/python3'
-            }
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexuspass', passwordVariable: 'NEXUSPASS', usernameVariable: 'NEXUSUSER')]) {
-                    ansiblePlaybook(
-                        inventory: 'ansible/stage.inventory',
-                        playbook: 'ansible/site.yml',
-                        installation: 'ansible',
-                        colorized: true,
-                        credentialsId: 'applogin',
-                        disableHostKeyChecking: true,
-                        extraVars: [
-                            USER: "admin",
-                            PASS: "$NEXUSPASS",
-                            nexusip: "${NEXUSIP}",
-                            reponame: "${RELEASE_REPO}",
-                            groupid: "QA",
-                            time: "${env.BUILD_TIMESTAMP}",
-                            build: "${env.BUILD_ID}",
-                            artifactid: "vproapp",
-                            vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war",
-                            ansible_python_interpreter: "${ANSIBLE_PYTHON_INTERPRETER}"
-                        ]
-                    )
-                }
+                ansiblePlaybook([
+                    inventory: 'ansible/stage.inventory',
+                    playbook: 'ansible/site.yml',
+                    installation: 'ansible',
+                    colorized: true,
+                    credentialsId: 'applogin',
+                    disableHostKeyChecking: true,
+                    extraVars: [
+                        USER: "admin",
+                        PASS: "${NEXUSPASS}",
+                        nexusip: "172.31.28.98",
+                        reponame: "vprofile-release",
+                        groupid: "QA",
+                        time: "${env.BUILD_TIMESTAMP}",
+                        build: "${env.BUILD_ID}",
+                        artifactid: "vproapp",
+                        vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war"
+                    ]
+                ])
             }
         }
     }
