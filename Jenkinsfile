@@ -1,8 +1,8 @@
-    // Define color map for Slack notifications
+// Define color map for Slack notifications
 def COLOR_MAP = [
-        'SUCCESS': 'good', 
-        'FAILURE': 'danger'
-    ]
+    'SUCCESS': 'good', 
+    'FAILURE': 'danger'
+]
     
 pipeline {
     agent any
@@ -24,9 +24,8 @@ pipeline {
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
+        NEXUSPASS = credentials("nexuspass")
     }
-
-
 
     stages {
         stage('Build') {
@@ -71,46 +70,53 @@ pipeline {
             }
         }
 
-        // Quality Gate stage commented out
-        /*
-        stage("Quality Gate") {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    script {
-                        echo "Waiting for SonarQube Quality Gate..."
-                        def qualityGate = waitForQualityGate abortPipeline: true
-                        echo "Quality Gate Status: ${qualityGate.status}"
-                    }
-                }
-            }
-        }
-        */
-
-        // New stage to upload artifact to Nexus
         stage("UploadArtifact") {
             steps {
                 nexusArtifactUploader(
-                    nexusVersion: 'nexus3', // Nexus version
-                    protocol: 'http', // Protocol (http or https)
-                    nexusUrl: "${NEXUSIP}:${NEXUSPORT}", // Nexus server URL
-                    groupId: 'QA', // Group ID for the artifact
-                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}", // Version of the artifact
-                    repository: "${RELEASE_REPO}", // Nexus repository to upload to
-                    credentialsId: "${NEXUS_LOGIN}", // Jenkins credentials ID for Nexus
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    nexusUrl: "${NEXUSIP}:${NEXUSPORT}",
+                    groupId: 'QA',
+                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
+                    repository: "${RELEASE_REPO}",
+                    credentialsId: "${NEXUS_LOGIN}",
                     artifacts: [
                         [
-                            artifactId: 'vproapp', // Artifact ID
-                            classifier: '', // Classifier (optional)
-                            file: 'target/vprofile-v2.war', // Path to the file to upload
-                            type: 'war' // Type of the artifact
+                            artifactId: 'vproapp',
+                            classifier: '',
+                            file: 'target/vprofile-v2.war',
+                            type: 'war'
                         ]
                     ]
                 )
             }
         }
+
+        stage('Ansible Deploy to staging') {
+            steps {
+                ansiblePlaybook([
+                    inventory: 'ansible/stage.inventory',
+                    playbook: 'ansible/site.yml',
+                    installation: 'ansible',
+                    colorized: true,
+                    credentialsId: 'applogin',
+                    disableHostKeyChecking: true,
+                    extraVars: [
+                        USER: "admin",
+                        PASS: "${NEXUSPASS}",
+                        nexusip: "172.31.28.98",
+                        reponame: "vprofile-release",
+                        groupid: "QA",
+                        time: "${env.BUILD_TIMESTAMP}",
+                        build: "${env.BUILD_ID}",
+                        artifactid: "vproapp",
+                        vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war"
+                    ]
+                ])
+            }
+        }
     }
 
-    // Post-build actions
     post {
         always {
             echo 'Sending Slack Notifications.'
