@@ -12,6 +12,8 @@ pipeline {
     }
 
     environment {
+        // Format timestamp without spaces for URL compatibility
+        BUILD_TIMESTAMP = new Date().format('yyyy-MM-dd-HHmm', TimeZone.getTimeZone('UTC'))
         SNAP_REPO = 'vprofile-snapshot'
         NEXUS_USER = 'admin'
         NEXUS_PASS = 'admin'
