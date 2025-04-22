@@ -1,36 +1,34 @@
-// Define color map for Slack notifications
 def COLOR_MAP = [
     'SUCCESS': 'good', 
-    'FAILURE': 'danger'
+    'FAILURE': 'danger',
+    'ABORTED': '#FFFF00',
+    'UNSTABLE': '#FFA500'
 ]
-    
+
 pipeline {
     agent any
     tools {
-        maven "MAVEN3.9"
-        jdk "JDK17"
+        maven "MAVEN3"
+        jdk "OracleJDK8"
     }
-
+    
     environment {
-        // Format timestamp without spaces for URL compatibility
-        BUILD_TIMESTAMP = new Date().format('yyyy-MM-dd-HHmm', TimeZone.getTimeZone('UTC'))
         SNAP_REPO = 'vprofile-snapshot'
         NEXUS_USER = 'admin'
-        NEXUS_PASS = 'admin'
+        NEXUS_PASS = 'admin123'
         RELEASE_REPO = 'vprofile-release'
         CENTRAL_REPO = 'vpro-maven-central'
-        NEXUSIP = '172.31.28.98'
+        NEXUSIP = '172.31.5.4'
         NEXUSPORT = '8081'
         NEXUS_GRP_REPO = 'vpro-maven-group'
         NEXUS_LOGIN = 'nexuslogin'
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
-        SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
-        NEXUSPASS = credentials("nexuspass")
+        NEXUSPASS = credentials('nexuspass')
     }
 
     stages {
-        stage('Build') {
+        stage('Build'){
             steps {
                 sh 'mvn -s settings.xml -DskipTests install'
             }
@@ -42,13 +40,13 @@ pipeline {
             }
         }
 
-        stage('Test') {
+        stage('Test'){
             steps {
                 sh 'mvn -s settings.xml test'
             }
         }
 
-        stage('Checkstyle Analysis') {
+        stage('Checkstyle Analysis'){
             steps {
                 sh 'mvn -s settings.xml checkstyle:checkstyle'
             }
@@ -59,20 +57,28 @@ pipeline {
                 scannerHome = tool "${SONARSCANNER}"
             }
             steps {
-                withSonarQubeEnv("${SONARSERVER}") {
-                    sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
-                    -Dsonar.projectName=vprofile \
-                    -Dsonar.projectVersion=1.0 \
-                    -Dsonar.sources=src/ \
-                    -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                    -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                    -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                    -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+               withSonarQubeEnv("${SONARSERVER}") {
+                   sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
+                   -Dsonar.projectName=vprofile \
+                   -Dsonar.projectVersion=1.0 \
+                   -Dsonar.sources=src/ \
+                   -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+                   -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                   -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                   -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+               }
+            }
+        }
+
+        stage("Quality Gate") {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage("UploadArtifact") {
+        stage("UploadArtifact"){
             steps {
                 nexusArtifactUploader(
                     nexusVersion: 'nexus3',
@@ -94,16 +100,16 @@ pipeline {
             }
         }
 
-        stage('Ansible Deploy to staging') {
+        stage('Ansible Deploy to staging'){
             steps {
                 ansiblePlaybook([
-                    inventory: 'ansible/stage.inventory',
-                    playbook: 'ansible/site.yml',
+                    inventory   : 'ansible/stage.inventory',
+                    playbook    : 'ansible/site.yml',
                     installation: 'ansible',
-                    colorized: true,
+                    colorized   : true,
                     credentialsId: 'applogin',
                     disableHostKeyChecking: true,
-                    extraVars: [
+                    extraVars   : [
                         USER: "admin",
                         PASS: "${NEXUSPASS}",
                         nexusip: "172.31.28.98",
@@ -121,9 +127,9 @@ pipeline {
 
     post {
         always {
-            echo 'Sending Slack Notifications.'
+            echo 'Slack Notifications.'
             slackSend channel: '#jenkinscicd',
-                color: COLOR_MAP[currentBuild.currentResult],
+                color: COLOR_MAP[currentBuild.currentResult] ?: '#CCCCCC',
                 message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at: ${env.BUILD_URL}"
         }
     }
