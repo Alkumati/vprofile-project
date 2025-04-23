@@ -1,9 +1,3 @@
-// Define color map for Slack notifications
-def COLOR_MAP = [
-    'SUCCESS': 'good', 
-    'FAILURE': 'danger'
-]
-    
 pipeline {
     agent any
     tools {
@@ -12,8 +6,6 @@ pipeline {
     }
 
     environment {
-        // Format timestamp without spaces for URL compatibility
-        //BUILD_TIMESTAMP = new Date().format('yyyy-MM-dd-HHmm', TimeZone.getTimeZone('UTC'))
         SNAP_REPO = 'vprofile-snapshot'
         NEXUS_USER = 'admin'
         NEXUS_PASS = 'admin'
@@ -27,9 +19,23 @@ pipeline {
         SONARSCANNER = 'sonarscanner'
         SONAR_SCANNER_OPTS = "--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
         NEXUSPASS = credentials("nexuspass")
+        ARTIFACT_NAME = "vprofile-v${BUILD_ID}.war"
+        AWS_S3_BUCKET = 'vprocicdbean2025'
+        AWS_EB_APP_NAME = 'vproapp'
+        AWS_EB_ENVIRONMENT = 'Vproapp-env'
+        AWS_EB_APP_VERSION = "${BUILD_ID}"
+        BUILD_TIMESTAMP = ""
     }
 
     stages {
+        stage('Initialize Timestamp') {
+            steps {
+                script {
+                    env.BUILD_TIMESTAMP = new Date().format('yyyy-MM-dd-HHmm', TimeZone.getTimeZone('UTC'))
+                }
+            }
+        }
+
         stage('Build') {
             steps {
                 sh 'mvn -s settings.xml -DskipTests install'
@@ -94,37 +100,54 @@ pipeline {
             }
         }
 
-        stage('Ansible Deploy to staging') {
+        stage('Deploy to Stage Bean') {
             steps {
-                ansiblePlaybook([
-                    inventory: 'ansible/stage.inventory',
-                    playbook: 'ansible/site.yml',
-                    installation: 'ansible',
-                    colorized: true,
-                    credentialsId: 'applogin',
-                    disableHostKeyChecking: true,
-                    extraVars: [
-                        USER: "admin",
-                        PASS: "${NEXUSPASS}",
-                        nexusip: "172.31.28.98",
-                        reponame: "vprofile-release",
-                        groupid: "QA",
-                        time: "${env.BUILD_TIMESTAMP}",
-                        build: "${env.BUILD_ID}",
-                        artifactid: "vproapp",
-                        vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war"
-                    ]
-                ])
+                withAWS(credentials: 'awsbeancreds', region: 'us-east-1') {
+                    sh 'aws s3 cp ./target/vprofile-v2.war s3://$AWS_S3_BUCKET/$ARTIFACT_NAME'
+                    sh 'aws elasticbeanstalk create-application-version --application-name $AWS_EB_APP_NAME --version-label $AWS_EB_APP_VERSION --source-bundle S3Bucket=$AWS_S3_BUCKET,S3Key=$ARTIFACT_NAME'
+                    sh 'aws elasticbeanstalk update-environment --application-name $AWS_EB_APP_NAME --environment-name $AWS_EB_ENVIRONMENT --version-label $AWS_EB_APP_VERSION'
+                }
             }
         }
+
+        // Uncomment this block if needed
+        // stage('Ansible Deploy to staging') {
+        //     steps {
+        //         ansiblePlaybook([
+        //             inventory: 'ansible/stage.inventory',
+        //             playbook: 'ansible/site.yml',
+        //             installation: 'ansible',
+        //             colorized: true,
+        //             credentialsId: 'applogin',
+        //             disableHostKeyChecking: true,
+        //             extraVars: [
+        //                 USER: "admin",
+        //                 PASS: "${NEXUSPASS}",
+        //                 nexusip: "${NEXUSIP}",
+        //                 reponame: "${RELEASE_REPO}",
+        //                 groupid: "QA",
+        //                 time: "${env.BUILD_TIMESTAMP}",
+        //                 build: "${env.BUILD_ID}",
+        //                 artifactid: "vproapp",
+        //                 vprofile_version: "vproapp-${env.BUILD_ID}-${env.BUILD_TIMESTAMP}.war"
+        //             ]
+        //         ])
+        //     }
+        // }
     }
 
     post {
         always {
-            echo 'Sending Slack Notifications.'
-            slackSend channel: '#jenkinscicd',
-                color: COLOR_MAP[currentBuild.currentResult],
-                message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at: ${env.BUILD_URL}"
+            script {
+                def COLOR_MAP = [
+                    'SUCCESS': 'good',
+                    'FAILURE': 'danger'
+                ]
+                echo 'Sending Slack Notifications.'
+                slackSend channel: '#jenkinscicd',
+                    color: COLOR_MAP[currentBuild.currentResult],
+                    message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at: ${env.BUILD_URL}"
+            }
         }
     }
 }
